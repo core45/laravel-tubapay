@@ -4,9 +4,9 @@ A Laravel integration for TubaPay BNPL (Buy Now, Pay Later) payment solutions.
 
 ## Requirements
 
-- PHP 8.2 or higher
-- Laravel 10.x, 11.x, or 12.x
-- core45/tubapay-php ^0.1
+- PHP 8.2 or higher; PHP 8.3 or higher for Laravel 13
+- Laravel 10.x, 11.x, 12.x, or 13.x
+- core45/tubapay-php ^0.1.1
 
 ## Installation
 
