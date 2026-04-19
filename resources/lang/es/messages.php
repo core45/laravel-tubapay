@@ -9,6 +9,9 @@ return [
     'payment_canceled' => 'Su pago ha sido cancelado.',
     'redirect_to_payment' => 'Redirigiendo a la página de pago...',
     'installments' => ':count cuotas',
+    'choose_installments' => 'Elige las cuotas',
+    'months' => 'meses',
+    'monthly' => 'mensual',
     'total_amount' => 'Importe total',
     'monthly_payment' => 'Pago mensual',
 ];

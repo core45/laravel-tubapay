@@ -73,6 +73,13 @@ return [
 
         // Whether to automatically register the webhook route
         'register_route' => true,
+
+        // Webhook idempotency protects event dispatch/persistence from retries
+        'idempotency' => [
+            'enabled' => env('TUBAPAY_WEBHOOK_IDEMPOTENCY', true),
+            'lease_minutes' => (int) env('TUBAPAY_WEBHOOK_IDEMPOTENCY_LEASE_MINUTES', 5),
+            'max_attempts' => (int) env('TUBAPAY_WEBHOOK_IDEMPOTENCY_MAX_ATTEMPTS', 5),
+        ],
     ],
 
     /*
@@ -87,6 +94,73 @@ return [
     */
 
     'return_url' => env('TUBAPAY_RETURN_URL'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Integration Metadata
+    |--------------------------------------------------------------------------
+    |
+    | Metadata sent with transaction creation requests. TubaPay's official
+    | WooCommerce plugin sends equivalent fields so partner support can identify
+    | integration source/version.
+    |
+    */
+
+    'integration' => [
+        'source' => env('TUBAPAY_INTEGRATION_SOURCE', 'laravel'),
+        'app_version' => env('TUBAPAY_APP_VERSION', 'laravel-tubapay'),
+        'app_detailed_version' => env('TUBAPAY_APP_DETAILED_VERSION', '0.4.0'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Checkout
+    |--------------------------------------------------------------------------
+    |
+    | Defaults used by the checkout selection store and Laravel checkout service.
+    |
+    */
+
+    'checkout' => [
+        'default_installments' => (int) env('TUBAPAY_DEFAULT_INSTALLMENTS', 12),
+        'selection_ttl_minutes' => (int) env('TUBAPAY_SELECTION_TTL_MINUTES', 30),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Optional UI Helpers
+    |--------------------------------------------------------------------------
+    |
+    | These routes and components mirror generic pieces of the official plugin
+    | without assuming a cart implementation. Routes are opt-in.
+    |
+    */
+
+    'ui' => [
+        'cache_ttl' => (int) env('TUBAPAY_UI_CACHE_TTL', 3600),
+        'register_routes' => env('TUBAPAY_UI_ROUTES', false),
+        'routes_middleware' => ['web'],
+        'top_bar' => [
+            'enabled' => env('TUBAPAY_TOP_BAR_ENABLED', false),
+            'sticky' => env('TUBAPAY_TOP_BAR_STICKY', true),
+            'font_size' => env('TUBAPAY_TOP_BAR_FONT_SIZE', 16),
+            'font_color' => env('TUBAPAY_TOP_BAR_FONT_COLOR', '#ffffff'),
+            'background_color' => env('TUBAPAY_TOP_BAR_BACKGROUND_COLOR', '#111827'),
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Optional Default Listeners
+    |--------------------------------------------------------------------------
+    |
+    | Host apps may opt in after binding TubaPayOrderResolver.
+    |
+    */
+
+    'listeners' => [
+        'auto_register' => env('TUBAPAY_AUTO_LISTENERS', false),
+    ],
 
     /*
     |--------------------------------------------------------------------------
@@ -127,6 +201,41 @@ return [
 
         // The table name for storing transactions
         'table' => 'tubapay_transactions',
+
+        // The table name for storing temporary checkout selections
+        'checkout_selections_table' => 'tubapay_checkout_selections',
+
+        // The table name for storing merchant payment notifications
+        'payments_table' => 'tubapay_payments',
+
+        // The table name for storing recurring order requests
+        'recurring_requests_table' => 'tubapay_recurring_requests',
+
+        // The table name for storing webhook idempotency state
+        'webhook_events_table' => 'tubapay_webhook_events',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Status Mapping
+    |--------------------------------------------------------------------------
+    |
+    | Optional application status mapping. The package does not update host
+    | application orders directly, but this map gives listeners a shared helper.
+    |
+    */
+
+    'status_map' => [
+        'draft' => null,
+        'registered' => null,
+        'signed' => null,
+        'accepted' => null,
+        'rejected' => null,
+        'canceled' => null,
+        'terminated' => null,
+        'withdrew' => null,
+        'repaid' => null,
+        'closed' => null,
     ],
 
     /*

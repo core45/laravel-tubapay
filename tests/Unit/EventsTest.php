@@ -6,6 +6,7 @@ namespace Core45\LaravelTubaPay\Tests\Unit;
 
 use Core45\LaravelTubaPay\Events\InvoiceRequested;
 use Core45\LaravelTubaPay\Events\PaymentReceived;
+use Core45\LaravelTubaPay\Events\RecurringOrderRequested;
 use Core45\LaravelTubaPay\Events\TransactionStatusChanged;
 use Core45\LaravelTubaPay\Events\WebhookReceived;
 use Core45\LaravelTubaPay\Tests\TestCase;
@@ -71,6 +72,18 @@ final class EventsTest extends TestCase
         $this->assertSame('ORDER-123', $event->getExternalRef());
         $this->assertSame('AGR-789', $event->getAgreementNumber());
         $this->assertIsArray($event->getPositions());
+    }
+
+    #[Test]
+    public function recurring_order_requested_event_provides_schedule_details(): void
+    {
+        $payload = $this->createInvoicePayload();
+
+        $event = new RecurringOrderRequested($payload);
+
+        $this->assertSame('ORDER-123', $event->getExternalRef());
+        $this->assertSame('AGR-789', $event->getAgreementNumber());
+        $this->assertSame('schedule-123', $event->getPaymentScheduleId());
     }
 
     private function createStatusChangedPayload(): StatusChangedPayload
@@ -185,6 +198,7 @@ final class EventsTest extends TestCase
                     'requestTotalAmount' => 500.0,
                     'requestPositions' => [
                         [
+                            'paymentScheduleId' => 'schedule-123',
                             'rateNumber' => 1,
                             'totalAmount' => 500.0,
                         ],

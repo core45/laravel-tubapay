@@ -9,6 +9,9 @@ return [
     'payment_canceled' => 'Your payment has been canceled.',
     'redirect_to_payment' => 'Redirecting to payment page...',
     'installments' => ':count installments',
+    'choose_installments' => 'Choose installments',
+    'months' => 'months',
+    'monthly' => 'monthly',
     'total_amount' => 'Total amount',
     'monthly_payment' => 'Monthly payment',
 ];

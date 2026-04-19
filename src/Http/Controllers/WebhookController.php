@@ -6,9 +6,12 @@ namespace Core45\LaravelTubaPay\Http\Controllers;
 
 use Core45\LaravelTubaPay\Events\InvoiceRequested;
 use Core45\LaravelTubaPay\Events\PaymentReceived;
+use Core45\LaravelTubaPay\Events\RecurringOrderRequested;
 use Core45\LaravelTubaPay\Events\TransactionStatusChanged;
 use Core45\LaravelTubaPay\Events\WebhookReceived;
-use Core45\LaravelTubaPay\Models\TubaPayTransaction;
+use Core45\LaravelTubaPay\Models\TubaPayRecurringRequest;
+use Core45\LaravelTubaPay\Services\TubaPayWebhookEventStore;
+use Core45\LaravelTubaPay\Services\TubaPayWebhookPersistence;
 use Core45\TubaPay\DTO\Webhook\InvoicePayload;
 use Core45\TubaPay\DTO\Webhook\PaymentPayload;
 use Core45\TubaPay\DTO\Webhook\StatusChangedPayload;
@@ -18,8 +21,8 @@ use Core45\TubaPay\TubaPay;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Routing\Controller;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * Controller for handling TubaPay webhooks.
@@ -31,6 +34,8 @@ final class WebhookController extends Controller
 {
     public function __construct(
         private readonly TubaPay $tubaPay,
+        private readonly TubaPayWebhookEventStore $webhookEvents,
+        private readonly TubaPayWebhookPersistence $webhookPersistence,
     ) {}
 
     /**
@@ -54,16 +59,27 @@ final class WebhookController extends Controller
 
         $this->logWebhookReceived($webhookPayload->commandType, $payload);
 
-        // Track transaction in database if enabled
-        $this->trackTransaction($webhookPayload);
+        $webhookEvent = $this->webhookEvents->begin($webhookPayload, $payload);
 
-        // Dispatch the generic webhook event
-        WebhookReceived::dispatch($webhookPayload, $payload);
+        if ($this->webhookEvents->isEnabled() && $webhookEvent === null) {
+            return new Response('OK', 200);
+        }
 
-        // Dispatch specific events based on webhook type
-        $this->dispatchSpecificEvent($webhookPayload);
+        try {
+            $recurringRequest = $this->webhookPersistence->persist($webhookPayload);
 
-        return new Response('OK', 200);
+            WebhookReceived::dispatch($webhookPayload, $payload);
+
+            $this->dispatchSpecificEvent($webhookPayload, $recurringRequest);
+
+            $this->webhookEvents->markProcessed($webhookEvent);
+
+            return new Response('OK', 200);
+        } catch (Throwable $e) {
+            $this->webhookEvents->markFailed($webhookEvent, $e->getMessage());
+
+            throw $e;
+        }
     }
 
     /**
@@ -85,58 +101,12 @@ final class WebhookController extends Controller
     }
 
     /**
-     * Track the transaction in the database.
-     */
-    private function trackTransaction(WebhookPayload $payload): void
-    {
-        /** @var bool $trackTransactions */
-        $trackTransactions = config('tubapay.database.track_transactions', true);
-
-        if (! $trackTransactions) {
-            return;
-        }
-
-        // Only track status changes for now
-        if (! $payload instanceof StatusChangedPayload) {
-            return;
-        }
-
-        $externalRef = $payload->externalRef;
-        if ($externalRef === null) {
-            return;
-        }
-
-        $transaction = TubaPayTransaction::findByExternalRef($externalRef);
-
-        if ($transaction === null) {
-            // Create new transaction record
-            $transaction = new TubaPayTransaction;
-            $transaction->external_ref = $externalRef;
-            $transaction->agreement_number = $payload->agreementNumber;
-            $transaction->amount = $payload->agreementNetValue;
-            $transaction->currency = 'PLN'; // TubaPay is PLN-based
-            $transaction->customer_name = trim(
-                $payload->customer->firstName.' '.$payload->customer->lastName
-            );
-            $transaction->customer_email = $payload->customer->email;
-            $transaction->customer_phone = $payload->customer->phone;
-            $transaction->status = $payload->agreementStatus->value;
-            $transaction->origin_company = $payload->originCompany;
-            $transaction->template_name = $payload->templateName;
-            $transaction->last_webhook_payload = $payload->rawPayload;
-            $transaction->status_changed_at = Carbon::now();
-            $transaction->save();
-        } else {
-            // Update existing transaction
-            $transaction->updateFromWebhook($payload);
-        }
-    }
-
-    /**
      * Dispatch the appropriate event based on webhook payload type.
      */
-    private function dispatchSpecificEvent(WebhookPayload $payload): void
-    {
+    private function dispatchSpecificEvent(
+        WebhookPayload $payload,
+        ?TubaPayRecurringRequest $recurringRequest,
+    ): void {
         if ($payload instanceof StatusChangedPayload) {
             TransactionStatusChanged::dispatch($payload);
 
@@ -151,6 +121,7 @@ final class WebhookController extends Controller
 
         if ($payload instanceof InvoicePayload) {
             InvoiceRequested::dispatch($payload);
+            RecurringOrderRequested::dispatch($payload, $recurringRequest);
         }
     }
 

@@ -26,6 +26,8 @@ use Illuminate\Support\Carbon;
  * @property float $amount
  * @property string $currency
  * @property int|null $installments
+ * @property array<int, string>|null $consents_accepted
+ * @property string|null $selection_source
  * @property string|null $customer_email
  * @property string|null $customer_phone
  * @property string|null $customer_name
@@ -54,6 +56,8 @@ class TubaPayTransaction extends Model
         'amount',
         'currency',
         'installments',
+        'consents_accepted',
+        'selection_source',
         'customer_email',
         'customer_phone',
         'customer_name',
@@ -81,6 +85,7 @@ class TubaPayTransaction extends Model
         return [
             'amount' => 'decimal:2',
             'installments' => 'integer',
+            'consents_accepted' => 'array',
             'status_changed_at' => 'datetime',
             'last_webhook_payload' => 'array',
             'metadata' => 'array',

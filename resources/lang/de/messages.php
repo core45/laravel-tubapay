@@ -9,6 +9,9 @@ return [
     'payment_canceled' => 'Ihre Zahlung wurde storniert.',
     'redirect_to_payment' => 'Weiterleitung zur Zahlungsseite...',
     'installments' => ':count Raten',
+    'choose_installments' => 'Raten auswählen',
+    'months' => 'Monate',
+    'monthly' => 'monatlich',
     'total_amount' => 'Gesamtbetrag',
     'monthly_payment' => 'Monatliche Zahlung',
 ];

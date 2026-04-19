@@ -6,7 +6,7 @@ A Laravel integration for TubaPay BNPL (Buy Now, Pay Later) payment solutions.
 
 - PHP 8.2 or higher; PHP 8.3 or higher for Laravel 13
 - Laravel 10.x, 11.x, 12.x, or 13.x
-- core45/tubapay-php ^0.1.2
+- core45/tubapay-php ^0.2.1
 
 ## Installation
 
@@ -31,6 +31,9 @@ TUBAPAY_CLIENT_ID=your-client-id
 TUBAPAY_CLIENT_SECRET=your-client-secret
 TUBAPAY_WEBHOOK_SECRET=your-webhook-secret
 TUBAPAY_ENVIRONMENT=test  # or production
+TUBAPAY_RETURN_URL=https://example.com/checkout/thanks
+TUBAPAY_UI_ROUTES=false
+TUBAPAY_AUTO_LISTENERS=false
 ```
 
 ## Quick Start
@@ -68,6 +71,7 @@ $offer = TubaPay::offers()->createOffer(
 );
 
 $installments = $offer->getAvailableInstallments(); // [3, 6, 9, 12]
+$consents = $offer->consents;
 
 // Create transaction with selected installments
 $transaction = TubaPay::transactions()->createTransaction(
@@ -85,6 +89,75 @@ return redirect($transaction->transactionLink);
 ```
 
 `acceptedConsents` should contain consent type identifiers returned by the TubaPay offer response. The current WooCommerce plugin sends `RODO_BP` when that consent is accepted.
+
+### Laravel Checkout Services
+
+Use `TubaPayCheckoutOptions` to build installment and consent options for checkout screens:
+
+```php
+use Core45\LaravelTubaPay\Services\TubaPayCheckoutOptions;
+
+$options = app(TubaPayCheckoutOptions::class)->forAmount(1000.00);
+```
+
+Render the included Blade primitives:
+
+```blade
+<x-tubapay::installment-selector :options="$options" />
+<x-tubapay::consent-checkboxes :options="$options" />
+```
+
+Persist the customer's selection between checkout steps:
+
+```php
+use Core45\LaravelTubaPay\Contracts\CheckoutSelectionStore;
+use Core45\TubaPay\DTO\CheckoutSelection;
+
+app(CheckoutSelectionStore::class)->put(
+    'ORDER-123',
+    new CheckoutSelection(
+        installments: 12,
+        acceptedConsents: ['RODO_BP'],
+        returnUrl: route('checkout.success', ['order' => 'ORDER-123']),
+    ),
+);
+```
+
+Then create and track the transaction from the stored selection:
+
+```php
+use Core45\LaravelTubaPay\Services\TubaPayCheckoutService;
+
+$transaction = app(TubaPayCheckoutService::class)->createTransactionForOrder(
+    externalRef: 'ORDER-123',
+    customer: $customer,
+    items: [$item],
+    callbackUrl: route('tubapay.webhook'),
+);
+
+return redirect($transaction->transactionLink);
+```
+
+The checkout service writes a `TubaPayTransaction` row with selected installments, accepted consents, selection source, transaction link, customer details, and integration metadata.
+
+### Optional UI Helper Routes
+
+Enable opt-in JSON routes when your checkout needs browser-side installment or TubaPay content loading:
+
+```env
+TUBAPAY_UI_ROUTES=true
+```
+
+Registered routes:
+
+| Method | Path | Route name | Purpose |
+|--------|------|------------|---------|
+| GET | `/tubapay/installments?amount=1000` | `tubapay.ui.installments` | Returns available installments, consents, and UI texts |
+| GET | `/tubapay/content/top-bar` | `tubapay.ui.content.top-bar` | Returns the TubaPay top bar content |
+| GET | `/tubapay/content/popup` | `tubapay.ui.content.popup` | Returns the TubaPay popup content |
+| GET | `/tubapay/texts` | `tubapay.ui.texts` | Returns checkout UI text labels |
+
+Content and UI text responses are cached for `TUBAPAY_UI_CACHE_TTL` seconds.
 
 ### Dependency Injection
 
@@ -115,6 +188,7 @@ The package automatically registers a webhook route at `/webhooks/tubapay` (conf
 Register listeners in your `EventServiceProvider`:
 
 ```php
+use Core45\LaravelTubaPay\Events\RecurringOrderRequested;
 use Core45\LaravelTubaPay\Events\TransactionStatusChanged;
 use Core45\LaravelTubaPay\Events\PaymentReceived;
 use Core45\LaravelTubaPay\Events\InvoiceRequested;
@@ -125,6 +199,9 @@ protected $listen = [
     ],
     PaymentReceived::class => [
         HandleTubaPayPayment::class,
+    ],
+    RecurringOrderRequested::class => [
+        CreateMonthlyOrderFromTubaPayRequest::class,
     ],
 ];
 ```
@@ -152,6 +229,114 @@ class HandleTubaPayStatusChange
         }
     }
 }
+```
+
+### Webhook Persistence and Idempotency
+
+When transaction tracking is enabled, the package now also stores:
+
+- Webhook idempotency state in `tubapay_webhook_events`
+- Merchant payment notifications in `tubapay_payments`
+- Recurring order requests in `tubapay_recurring_requests`
+
+Duplicate webhook deliveries with the same TubaPay `commandType:commandRef` are acknowledged without dispatching duplicate Laravel events after the first successful processing pass. Failed and stuck processing events can be retried based on the configured lease and max-attempt settings.
+
+Recurring requests dispatch both `InvoiceRequested` and `RecurringOrderRequested`. Prefer `RecurringOrderRequested` for new code:
+
+```php
+use Core45\LaravelTubaPay\Events\RecurringOrderRequested;
+
+final class CreateMonthlyOrderFromTubaPayRequest
+{
+    public function handle(RecurringOrderRequested $event): void
+    {
+        $externalRef = $event->getExternalRef();
+        $paymentScheduleId = $event->getPaymentScheduleId();
+        $position = $event->getFirstPosition();
+
+        // Find the local order and create the application-specific monthly order.
+    }
+}
+```
+
+### Status Mapping
+
+Configure an optional status map for application listeners:
+
+```php
+'status_map' => [
+    'accepted' => 'paid',
+    'rejected' => 'failed',
+],
+```
+
+Use the helper in your listener:
+
+```php
+use Core45\LaravelTubaPay\Services\TubaPayStatusMapper;
+
+$mappedStatus = app(TubaPayStatusMapper::class)->map($event->getStatus());
+```
+
+### Optional Default Listeners
+
+If your order model can implement a small TubaPay integration contract, the package can auto-register default listeners for accepted, rejected, payment, and recurring request events.
+
+Bind an order resolver:
+
+```php
+use App\Models\Order;
+use Core45\LaravelTubaPay\Contracts\TubaPayOrderResolver;
+use Core45\LaravelTubaPay\Contracts\TubaPayTransactable;
+
+final class OrderResolver implements TubaPayOrderResolver
+{
+    public function resolve(string $externalRef): ?TubaPayTransactable
+    {
+        return Order::where('external_ref', $externalRef)->first();
+    }
+}
+```
+
+Implement `TubaPayTransactable` on the resolved order object:
+
+```php
+use Core45\LaravelTubaPay\Contracts\TubaPayTransactable;
+
+final class Order extends Model implements TubaPayTransactable
+{
+    public function markTubaPayAccepted(string $agreementNumber): void
+    {
+        $this->forceFill([
+            'status' => 'paid',
+            'tubapay_agreement_number' => $agreementNumber,
+        ])->save();
+    }
+
+    public function markTubaPayRejected(string $status, ?string $agreementNumber = null): void
+    {
+        $this->forceFill([
+            'status' => $status,
+            'tubapay_agreement_number' => $agreementNumber,
+        ])->save();
+    }
+
+    public function recordTubaPayEvent(string $event, string $details): void
+    {
+        // Persist to your order history table.
+    }
+
+    public function isTubaPayPaid(): bool
+    {
+        return $this->status === 'paid';
+    }
+}
+```
+
+Then enable listener registration:
+
+```env
+TUBAPAY_AUTO_LISTENERS=true
 ```
 
 ## Transaction Tracking
@@ -193,6 +378,27 @@ Display status badges:
 <x-tubapay::status-badge :status="$transaction->status" />
 ```
 
+Render checkout controls:
+
+```blade
+<x-tubapay::installment-selector :options="$options" />
+<x-tubapay::consent-checkboxes :options="$options" />
+```
+
+Render official content returned by the SDK:
+
+```blade
+<x-tubapay::top-bar :content="$topBarContent" />
+<x-tubapay::popup :content="$popupContent" />
+```
+
+## Console Commands
+
+```bash
+php artisan tubapay:check-connection
+php artisan tubapay:prune-selections
+```
+
 ## Translations
 
 Translations are available in 6 languages: en, pl, de, es, fr, it.
@@ -225,6 +431,12 @@ See `config/tubapay.php` for all configuration options including:
 - Webhook route customization
 - Cache settings for token storage
 - Database settings for transaction tracking
+- Checkout defaults and selection TTL
+- Optional UI route registration and content cache TTL
+- Optional default listener registration
+- Webhook idempotency lease and retry settings
+- Optional status mapping
+- Integration metadata sent to TubaPay
 - Logging options
 
 ## Testing
