@@ -6,7 +6,7 @@ A Laravel integration for TubaPay BNPL (Buy Now, Pay Later) payment solutions.
 
 - PHP 8.2 or higher; PHP 8.3 or higher for Laravel 13
 - Laravel 10.x, 11.x, 12.x, or 13.x
-- core45/tubapay-php ^0.1.1
+- core45/tubapay-php ^0.1.2
 
 ## Installation
 
@@ -76,11 +76,15 @@ $transaction = TubaPay::transactions()->createTransaction(
     installments: 6,
     callbackUrl: route('tubapay.webhook'),
     externalRef: 'ORDER-123',
+    returnUrl: route('checkout.success', ['order' => 'ORDER-123']),
+    acceptedConsents: ['RODO_BP'],
 );
 
 // Redirect customer to payment page
 return redirect($transaction->transactionLink);
 ```
+
+`acceptedConsents` should contain consent type identifiers returned by the TubaPay offer response. The current WooCommerce plugin sends `RODO_BP` when that consent is accepted.
 
 ### Dependency Injection
 

@@ -18,6 +18,7 @@ use Core45\TubaPay\TubaPay;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -91,12 +92,12 @@ final class WebhookController extends Controller
         /** @var bool $trackTransactions */
         $trackTransactions = config('tubapay.database.track_transactions', true);
 
-        if (!$trackTransactions) {
+        if (! $trackTransactions) {
             return;
         }
 
         // Only track status changes for now
-        if (!$payload instanceof StatusChangedPayload) {
+        if (! $payload instanceof StatusChangedPayload) {
             return;
         }
 
@@ -109,7 +110,7 @@ final class WebhookController extends Controller
 
         if ($transaction === null) {
             // Create new transaction record
-            $transaction = new TubaPayTransaction();
+            $transaction = new TubaPayTransaction;
             $transaction->external_ref = $externalRef;
             $transaction->agreement_number = $payload->agreementNumber;
             $transaction->amount = $payload->agreementNetValue;
@@ -123,7 +124,7 @@ final class WebhookController extends Controller
             $transaction->origin_company = $payload->originCompany;
             $transaction->template_name = $payload->templateName;
             $transaction->last_webhook_payload = $payload->rawPayload;
-            $transaction->status_changed_at = now();
+            $transaction->status_changed_at = Carbon::now();
             $transaction->save();
         } else {
             // Update existing transaction
@@ -160,7 +161,7 @@ final class WebhookController extends Controller
     {
         /** @var bool $logWebhooks */
         $logWebhooks = config('tubapay.logging.log_webhooks', false);
-        if (!$logWebhooks) {
+        if (! $logWebhooks) {
             return;
         }
 
@@ -182,7 +183,7 @@ final class WebhookController extends Controller
     {
         /** @var bool $logWebhooks */
         $logWebhooks = config('tubapay.logging.log_webhooks', false);
-        if (!$logWebhooks) {
+        if (! $logWebhooks) {
             return;
         }
 

@@ -18,7 +18,7 @@
     ],
     "require": {
         "php": "^8.2",
-        "core45/tubapay-php": "^0.1.1",
+        "core45/tubapay-php": "^0.1.2",
         "illuminate/support": "^10.0|^11.0|^12.0|^13.0",
         "illuminate/contracts": "^10.0|^11.0|^12.0|^13.0",
         "illuminate/http": "^10.0|^11.0|^12.0|^13.0",
@@ -56,7 +56,7 @@
         "sort-packages": true
     },
     "minimum-stability": "dev",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "prefer-stable": true,
     "scripts": {
         "test": "phpunit",

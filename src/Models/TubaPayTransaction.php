@@ -9,6 +9,7 @@ use Core45\TubaPay\Enum\AgreementStatus;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Carbon;
 
 /**
  * TubaPay Transaction Model.
@@ -21,7 +22,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * @property string|null $transaction_link
  * @property string $status
  * @property string|null $previous_status
- * @property \Illuminate\Support\Carbon|null $status_changed_at
+ * @property Carbon|null $status_changed_at
  * @property float $amount
  * @property string $currency
  * @property int|null $installments
@@ -32,9 +33,9 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * @property string|null $template_name
  * @property array<string, mixed>|null $last_webhook_payload
  * @property array<string, mixed>|null $metadata
- * @property \Illuminate\Support\Carbon|null $created_at
- * @property \Illuminate\Support\Carbon|null $updated_at
- * @property \Illuminate\Support\Carbon|null $deleted_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
+ * @property Carbon|null $deleted_at
  */
 class TubaPayTransaction extends Model
 {
@@ -133,10 +134,10 @@ class TubaPayTransaction extends Model
     {
         $this->previous_status = $this->status;
         $this->status = $payload->agreementStatus->value;
-        $this->status_changed_at = now();
+        $this->status_changed_at = Carbon::now();
         $this->agreement_number = $payload->agreementNumber ?? $this->agreement_number;
-        $this->origin_company = $payload->originCompany ?? $this->origin_company;
-        $this->template_name = $payload->templateName ?? $this->template_name;
+        $this->origin_company = $payload->originCompany;
+        $this->template_name = $payload->templateName;
         $this->last_webhook_payload = $payload->rawPayload;
 
         $this->save();
@@ -154,7 +155,7 @@ class TubaPayTransaction extends Model
     /**
      * Scope a query to only include pending transactions.
      *
-     * @param Builder<TubaPayTransaction> $query
+     * @param  Builder<TubaPayTransaction>  $query
      * @return Builder<TubaPayTransaction>
      */
     public function scopePending(Builder $query): Builder
@@ -170,7 +171,7 @@ class TubaPayTransaction extends Model
     /**
      * Scope a query to only include successful transactions.
      *
-     * @param Builder<TubaPayTransaction> $query
+     * @param  Builder<TubaPayTransaction>  $query
      * @return Builder<TubaPayTransaction>
      */
     public function scopeSuccessful(Builder $query): Builder
@@ -186,7 +187,7 @@ class TubaPayTransaction extends Model
     /**
      * Scope a query to only include failed transactions.
      *
-     * @param Builder<TubaPayTransaction> $query
+     * @param  Builder<TubaPayTransaction>  $query
      * @return Builder<TubaPayTransaction>
      */
     public function scopeFailed(Builder $query): Builder
@@ -203,7 +204,7 @@ class TubaPayTransaction extends Model
     /**
      * Scope a query to filter by customer email.
      *
-     * @param Builder<TubaPayTransaction> $query
+     * @param  Builder<TubaPayTransaction>  $query
      * @return Builder<TubaPayTransaction>
      */
     public function scopeForCustomer(Builder $query, string $email): Builder
